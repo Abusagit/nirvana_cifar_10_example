@@ -261,6 +261,8 @@ def main():
     use_cuda = not args.no_cuda and torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
 
+    print(f"Device is {device}")
+
     transforms = Compose([
         Resize((args.img_size, args.img_size)),
         ToTensor()
