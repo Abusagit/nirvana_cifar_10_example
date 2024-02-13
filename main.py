@@ -279,6 +279,7 @@ def main():
 
     TrainEval(args, model, train_loader, valid_loader, optimizer, criterion, device).train()
 
-
+    copy_out_to_snapshot("checkpoints", dump=True)
+    
 if __name__ == "__main__":
     main()
