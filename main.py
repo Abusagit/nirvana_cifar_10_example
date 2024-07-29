@@ -8,12 +8,32 @@ from torch import optim
 import numpy as np
 from torch.hub import tqdm
 
+from ujson import load
+
+from dataclasses import dataclass
+
 #################
 # Nirvana funcs #
 #################
 
 from nirvana_utils import copy_snapshot_to_out, copy_out_to_snapshot
 
+CONFIG_FILE = "CONFIG.json"
+
+@dataclass
+class Config:
+    patch_size: int = 16
+    latent_size: int = 384
+    num_heads: int = 6
+    epochs: int = 10
+    
+    
+def get_config() -> Config:
+    with open(CONFIG_FILE) as f_read:
+        config_json = load(f_read)
+    config = Config(**config_json)
+    
+    return config
 
 class PatchExtractor(nn.Module):
     def __init__(self, patch_size=16):
@@ -42,11 +62,11 @@ class PatchExtractor(nn.Module):
 
 class InputEmbedding(nn.Module):
 
-    def __init__(self, args):
+    def __init__(self, args, patch_size, latent_size):
         super(InputEmbedding, self).__init__()
-        self.patch_size = args.patch_size
+        self.patch_size = patch_size
         self.n_channels = args.n_channels
-        self.latent_size = args.latent_size
+        self.latent_size = latent_size
         use_cuda = not args.no_cuda and torch.cuda.is_available()
         self.device = torch.device("cuda" if use_cuda else "cpu")
         self.batch_size = args.batch_size
@@ -76,11 +96,11 @@ class InputEmbedding(nn.Module):
 
 class EncoderBlock(nn.Module):
 
-    def __init__(self, args):
+    def __init__(self, args, latent_size, num_heads):
         super(EncoderBlock, self).__init__()
 
-        self.latent_size = args.latent_size
-        self.num_heads = args.num_heads
+        self.latent_size = latent_size
+        self.num_heads = num_heads
         self.dropout = args.dropout
         self.norm = nn.LayerNorm(self.latent_size)
         self.attention = nn.MultiheadAttention(self.latent_size, self.num_heads, dropout=self.dropout)
@@ -104,17 +124,17 @@ class EncoderBlock(nn.Module):
 
 
 class ViT(nn.Module):
-    def __init__(self, args):
+    def __init__(self, args, latent_size, patch_size, num_heads):
         super(ViT, self).__init__()
 
         self.num_encoders = args.num_encoders
-        self.latent_size = args.latent_size
+        self.latent_size = latent_size
         self.num_classes = args.num_classes
         self.dropout = args.dropout
 
-        self.embedding = InputEmbedding(args)
+        self.embedding = InputEmbedding(args, patch_size, latent_size)
         # Encoder Stack
-        self.encoders = nn.ModuleList([EncoderBlock(args) for _ in range(self.num_encoders)])
+        self.encoders = nn.ModuleList([EncoderBlock(args, latent_size, num_heads) for _ in range(self.num_encoders)])
         self.MLPHead = nn.Sequential(
             nn.LayerNorm(self.latent_size),
             nn.Linear(self.latent_size, self.latent_size),
@@ -132,13 +152,13 @@ class ViT(nn.Module):
 
 class TrainEval:
 
-    def __init__(self, args, model, train_dataloader, val_dataloader, optimizer, criterion, device):
+    def __init__(self, args, epochs, model, train_dataloader, val_dataloader, optimizer, criterion, device):
         self.model = model
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
         self.optimizer = optimizer
         self.criterion = criterion
-        self.epoch = args.epochs
+        self.epoch = epochs
         self.device = device
         self.args = args
 
@@ -224,14 +244,14 @@ def main():
     parser = argparse.ArgumentParser(description='Vision Transformer in PyTorch')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='disables CUDA training')
-    parser.add_argument('--patch-size', type=int, default=16,
-                        help='patch size for images (default : 16)')
-    parser.add_argument('--latent-size', type=int, default=384,
-                        help='latent size (default : 384)')
+    # parser.add_argument('--patch-size', type=int, default=16,
+    #                     help='patch size for images (default : 16)')
+    # parser.add_argument('--latent-size', type=int, default=384,
+    #                     help='latent size (default : 384)')
     parser.add_argument('--n-channels', type=int, default=3,
                         help='number of channels in images (default : 3 for RGB)')
-    parser.add_argument('--num-heads', type=int, default=6,
-                        help='(default : 16)')
+    # parser.add_argument('--num-heads', type=int, default=6,
+    #                     help='(default : 16)')
     parser.add_argument('--num-encoders', type=int, default=12,
                         help='number of encoders (default : 12)')
     parser.add_argument('--dropout', type=int, default=0.1,
@@ -240,8 +260,8 @@ def main():
                         help='image size to be reshaped to (default : 224')
     parser.add_argument('--num-classes', type=int, default=10,
                         help='number of classes in dataset (default : 10 for CIFAR10)')
-    parser.add_argument('--epochs', type=int, default=2,
-                        help='number of epochs (default : 2)')
+    # parser.add_argument('--epochs', type=int, default=2,
+    #                     help='number of epochs (default : 2)')
     parser.add_argument('--lr', type=int, default=1e-2,
                         help='base learning rate (default : 0.01)')
     parser.add_argument('--weight-decay', type=int, default=3e-2,
@@ -251,6 +271,9 @@ def main():
     parser.add_argument('--dry-run', action='store_true', default=False,
                         help='quickly check a single pass')
     args = parser.parse_args()
+    
+    
+    config = get_config()
    
     #############
     # IMPORTANT #
@@ -267,17 +290,18 @@ def main():
         Resize((args.img_size, args.img_size)),
         ToTensor()
     ])
+    
     train_data = torchvision.datasets.CIFAR10(root='./dataset', train=True, download=False, transform=transforms)
     valid_data = torchvision.datasets.CIFAR10(root='./dataset', train=False, download=False, transform=transforms)
     train_loader = DataLoader(train_data, batch_size=args.batch_size, num_workers=4, shuffle=True, drop_last=True)
     valid_loader = DataLoader(valid_data, batch_size=args.batch_size, num_workers=4, shuffle=False)
 
-    model = ViT(args).to(device)
+    model = ViT(args, latent_size=config.latent_size, num_heads=config.num_heads, patch_size=config.patch_size).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     criterion = nn.CrossEntropyLoss()
 
-    TrainEval(args, model, train_loader, valid_loader, optimizer, criterion, device).train()
+    TrainEval(args, model, train_loader, valid_loader, optimizer, criterion, device, epochs=config.epochs).train()
 
 
 if __name__ == "__main__":
