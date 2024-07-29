@@ -305,13 +305,13 @@ def main():
         optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         criterion = nn.CrossEntropyLoss()
 
-        TrainEval(args, model, train_loader, valid_loader, optimizer, criterion, device, epochs=config.epochs).train()
+        TrainEval(args, config.epochs, model, train_loader, valid_loader, optimizer, criterion, device).train()
     else:
         
         test_data = torchvision.datasets.CIFAR10(root='./dataset', train=False, download=False, transform=transforms)
         test_loader = DataLoader(test_data, batch_size=args.batch_size, num_workers=4, shuffle=False)
 
-        model = ViT(args).to(device)
+        model = ViT(args, latent_size=config.latent_size, num_heads=config.num_heads, patch_size=config.patch_size).to(device)
         
         model.load_state_dict(torch.load("checkpoints/best-weights.pt", map_location=device))
         print("Loaded best weights from the training from the location checkpoints/best-weights.pt")
@@ -319,7 +319,7 @@ def main():
         # optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         criterion = nn.CrossEntropyLoss()
         
-        TrainEval(args, model, None, test_loader, None, criterion, device).eval_fn(1)
+        TrainEval(args, config.epochs, model, None, test_loader, None, criterion, device).eval_fn(1)
         
 
         
