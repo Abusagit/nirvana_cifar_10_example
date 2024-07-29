@@ -270,6 +270,8 @@ def main():
                         help='batch size (default : 16)')
     parser.add_argument('--dry-run', action='store_true', default=False,
                         help='quickly check a single pass')
+    parser.add_argument("--mode", type=str, choices=["train", "inference"], default="train",
+                        help="Behaviour of the workflow")
     args = parser.parse_args()
     
     
@@ -291,18 +293,37 @@ def main():
         ToTensor()
     ])
     
-    train_data = torchvision.datasets.CIFAR10(root='./dataset', train=True, download=False, transform=transforms)
-    valid_data = torchvision.datasets.CIFAR10(root='./dataset', train=False, download=False, transform=transforms)
-    train_loader = DataLoader(train_data, batch_size=args.batch_size, num_workers=4, shuffle=True, drop_last=True)
-    valid_loader = DataLoader(valid_data, batch_size=args.batch_size, num_workers=4, shuffle=False)
+    if args.mode == "train":
+        
+        train_data = torchvision.datasets.CIFAR10(root='./dataset', train=True, download=False, transform=transforms)
+        valid_data = torchvision.datasets.CIFAR10(root='./dataset', train=False, download=False, transform=transforms)
+        train_loader = DataLoader(train_data, batch_size=args.batch_size, num_workers=4, shuffle=True, drop_last=True)
+        valid_loader = DataLoader(valid_data, batch_size=args.batch_size, num_workers=4, shuffle=False)
 
-    model = ViT(args, latent_size=config.latent_size, num_heads=config.num_heads, patch_size=config.patch_size).to(device)
+        model = ViT(args, latent_size=config.latent_size, num_heads=config.num_heads, patch_size=config.patch_size).to(device)
 
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    criterion = nn.CrossEntropyLoss()
+        optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+        criterion = nn.CrossEntropyLoss()
 
-    TrainEval(args, model, train_loader, valid_loader, optimizer, criterion, device, epochs=config.epochs).train()
+        TrainEval(args, model, train_loader, valid_loader, optimizer, criterion, device, epochs=config.epochs).train()
+    else:
+        
+        test_data = torchvision.datasets.CIFAR10(root='./dataset', train=False, download=False, transform=transforms)
+        test_loader = DataLoader(test_data, batch_size=args.batch_size, num_workers=4, shuffle=False)
 
+        model = ViT(args).to(device)
+        
+        model.load_state_dict(torch.load("checkpoints/best-weights.pt", map_location=device))
+        print("Loaded best weights from the training from the location checkpoints/best-weights.pt")
+        
+        # optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+        criterion = nn.CrossEntropyLoss()
+        
+        TrainEval(args, model, None, test_loader, None, criterion, device).eval_fn(1)
+        
 
+        
+    copy_out_to_snapshot("checkpoints", dump=True)
+    
 if __name__ == "__main__":
     main()
