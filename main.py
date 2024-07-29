@@ -319,8 +319,7 @@ def main():
         # optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         criterion = nn.CrossEntropyLoss()
         
-        TrainEval(args, config.epochs, model, None, test_loader, None, criterion, device).eval_fn(1)
-        
+        TrainEval(args, config.epochs, model, None, test_loader, None, criterion, device).eval_fn(1)        
 
         
     copy_out_to_snapshot("checkpoints", dump=True)
