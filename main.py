@@ -8,7 +8,7 @@ from torch import optim
 import numpy as np
 from torch.hub import tqdm
 
-from ujson import load
+from json import load, dump
 
 from dataclasses import dataclass
 
@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from nirvana_utils import copy_snapshot_to_out, copy_out_to_snapshot
 
 CONFIG_FILE = "CONFIG.json"
+JSON_RESULTS_FILENAME = "result_metrics.json"
 
 @dataclass
 class Config:
@@ -165,7 +166,7 @@ class TrainEval:
     def train_fn(self, current_epoch):
         self.model.train()
         total_loss = 0.0
-        tk = tqdm(self.train_dataloader, desc="EPOCH" + "[TRAIN]" + str(current_epoch + 1) + "/" + str(self.epoch))
+        tk = tqdm(self.train_dataloader, desc="EPOCH" + " [TRAIN] " + str(current_epoch + 1) + "/" + str(self.epoch))
 
         for t, data in enumerate(tk):
             images, labels = data
@@ -183,10 +184,14 @@ class TrainEval:
 
         return total_loss / len(self.train_dataloader)
 
-    def eval_fn(self, current_epoch):
+    def eval_fn(self, current_epoch, is_test=False):
         self.model.eval()
         total_loss = 0.0
-        tk = tqdm(self.val_dataloader, desc="EPOCH" + "[VALID]" + str(current_epoch + 1) + "/" + str(self.epoch))
+        test_val_token = "[TEST]" if is_test else "[VALID]"
+        
+        description_string = f"EPOCH {test_val_token} {current_epoch}/{self.epoch}"
+        
+        tk = tqdm(self.val_dataloader, desc=description_string)
 
         for t, data in enumerate(tk):
             images, labels = data
@@ -223,6 +228,8 @@ class TrainEval:
 
         print(f"Training Loss : {best_train_loss}")
         print(f"Valid Loss : {best_valid_loss}")
+        
+        return best_train_loss, best_valid_loss
 
     '''
         On default settings:
@@ -305,7 +312,9 @@ def main():
         optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         criterion = nn.CrossEntropyLoss()
 
-        TrainEval(args, config.epochs, model, train_loader, valid_loader, optimizer, criterion, device).train()
+        train_loss, valid_loss = TrainEval(args, config.epochs, model, train_loader, valid_loader, optimizer, criterion, device).train()
+        test_loss = None
+
     else:
         
         test_data = torchvision.datasets.CIFAR10(root='./dataset', train=False, download=False, transform=transforms)
@@ -319,9 +328,21 @@ def main():
         # optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         criterion = nn.CrossEntropyLoss()
         
-        TrainEval(args, config.epochs, model, None, test_loader, None, criterion, device).eval_fn(1)        
-
+        train_loss, valid_loss = None, None
+        test_loss = TrainEval(args, config.epochs, model, None, test_loader, None, criterion, device).eval_fn(1)
         
+    result_dict = dict(
+        train_loss=train_loss,
+        valid_loss=valid_loss,
+        test_loss=test_loss,
+    )
+    
+    ## dumping result:
+    with open(JSON_RESULTS_FILENAME, "w") as f_write:
+        dump(obj=result_dict, fp=f_write, indent=4, sort_keys=True)
+    
+    print(f"Resulting metrics were saved to {JSON_RESULTS_FILENAME}")
+    
     copy_out_to_snapshot("checkpoints", dump=True)
     
 if __name__ == "__main__":
