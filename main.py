@@ -10,6 +10,8 @@ from torch.hub import tqdm
 
 from json import load, dump
 
+from typing import Union, List, Dict, Any
+
 from dataclasses import dataclass
 
 #################
@@ -35,6 +37,25 @@ def get_config() -> Config:
     config = Config(**config_json)
     
     return config
+
+def create_metrics_for_pulsar(metrics_dict: Dict[str, float], main_metric:str="validation_loss") -> List[Dict[str, Any]]:
+    
+    metrics_list: List[Dict[str, Any]] = []
+    
+    for metric_name, metric_value in metrics_dict.items():
+        
+        metric_dict: Dict[str, Any] = dict(
+            name=metric_name,
+            value=metric_value,
+            slize="slice1"
+        )
+        
+        if metric_name == main_metric:
+            metric_dict["main"] = True
+            
+        metrics_list.append(metric_dict)
+        
+        return metrics_list
 
 class PatchExtractor(nn.Module):
     def __init__(self, patch_size=16):
@@ -337,9 +358,11 @@ def main():
         test_loss=test_loss,
     )
     
+    metrics_information = create_metrics_for_pulsar(metrics_dict=result_dict, main_metric="validation_loss")
+    
     ## dumping result:
     with open(JSON_RESULTS_FILENAME, "w") as f_write:
-        dump(obj=result_dict, fp=f_write, indent=4, sort_keys=True)
+        dump(obj=metrics_information, fp=f_write, indent=4, sort_keys=True)
     
     print(f"Resulting metrics were saved to {JSON_RESULTS_FILENAME}")
     
