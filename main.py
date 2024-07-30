@@ -50,8 +50,8 @@ def create_metrics_for_pulsar(metrics_dict: Dict[str, float], main_metric:str="v
             # slice="slice1"
         )
         
-        # if metric_name == main_metric:
-        #     metric_dict["main"] = True
+        if metric_name == main_metric:
+            metric_dict["main"] = True
             
         metrics_list.append(metric_dict)
         
