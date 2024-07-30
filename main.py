@@ -47,15 +47,15 @@ def create_metrics_for_pulsar(metrics_dict: Dict[str, float], main_metric:str="v
         metric_dict: Dict[str, Any] = dict(
             name=metric_name,
             value=metric_value,
-            slize="slice1"
+            # slice="slice1"
         )
         
-        if metric_name == main_metric:
-            metric_dict["main"] = True
+        # if metric_name == main_metric:
+        #     metric_dict["main"] = True
             
         metrics_list.append(metric_dict)
         
-        return metrics_list
+    return metrics_list
 
 class PatchExtractor(nn.Module):
     def __init__(self, patch_size=16):
